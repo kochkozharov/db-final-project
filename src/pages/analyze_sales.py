@@ -35,4 +35,7 @@ def show_analyze_sales_page():
             if display_option == "Table":
                 st.dataframe(sales)
             else:
-                st.line_chart(sales, x="sale_date", y="quantity")
+                if len(sales) == 1:
+                    st.warning("Только одна продажа...")
+                else:
+                    st.line_chart(sales, x="sale_date", y="quantity")
