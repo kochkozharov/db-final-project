@@ -1,64 +1,82 @@
-from datetime import datetime, timedelta
+from datetime import date
 
 import pandas as pd
+
 import streamlit as st
 from services.sales import SalesService
-from adapters.repositories.product import ProductRepository
+import repositories.products
+import random
+
+# Хранение добавленных товаров в таблице
+if "sales_table" not in st.session_state:
+    st.session_state.sales_table = pd.DataFrame(
+        columns=["Название продукта", "Barcode", "Количество"]
+    )
+
+
+@st.cache_data
+def get_products() -> dict[str, str]:
+    print("Получение продуктов")
+    products = repositories.products.get_products()
+
+    return {product["name"]: product["barcode"] for product in products}
+
+
+def add_product_event(product_name, product_barcode, product_quantity):
+    new_row = pd.DataFrame(
+        {
+            "Название продукта": [product_name],
+            "Barcode": [product_barcode],
+            "Количество": [product_quantity],
+        }
+    )
+    st.session_state.sales_table = pd.concat(
+        [st.session_state.sales_table, new_row], ignore_index=True
+    )
+
+
+def clear_table_event():
+    st.session_state.sales_table = pd.DataFrame(
+        columns=["Название продукта", "Barcode", "Количество"]
+    )
+
+
+def upload_sales(sales_table: pd.DataFrame) -> int:
+    sale_date = date(2024, random.randint(1, 12), random.randint(1, 28))
+    sale_id = SalesService().process_sale(
+        sale_date,
+        sales_table,
+    )
+    st.write(f"Продажа за число {sale_date}")
+    return sale_id
+
+
+products = get_products()
 
 
 def show_selling_products_page():
-    # Хранение добавленных товаров в таблице
-    if "sales_table" not in st.session_state:
-        st.session_state.sales_table = pd.DataFrame(
-            columns=["Название продукта", "Barcode", "Количество"]
-        )
-
-    if "products" not in st.session_state:
-        st.session_state.products = ProductRepository().get_products()
-
     st.title("Продажа продуктов")
 
-    # Получение даты
-    date = st.date_input("Выберите дату", datetime.now())
-    time = st.time_input("Выберите время", datetime.now(), step=timedelta(minutes=1))
-    datetime_combined = datetime.combine(date, time)
-
-    product_names = [product["name"] for product in st.session_state.products]
-    product_barcodes = [product["barcode"] for product in st.session_state.products]
-
     # Поля для ввода данных
-    selected_product = st.selectbox("Выберите продукт", product_names)
+    selected_product = st.selectbox("Выберите продукт", products.keys())
     quantity = st.number_input("Количество", min_value=1, max_value=100, value=1)
 
-    # Найдем barcode выбранного продукта
-    selected_product_barcode = product_barcodes[product_names.index(selected_product)]
+    # кнопки
+    add_product_btn = st.button("Добавить продукт")
+    clear_table_btn = st.button("Очистить таблицу")
+    apply_btn = st.button("Подтвердить продажу")
 
-    # Добавление товара в таблицу
-    if st.button("Добавить продукт"):
-        new_row = pd.DataFrame(
-            {
-                "Название продукта": [selected_product],
-                "Barcode": [selected_product_barcode],
-                "Количество": [quantity],
-            }
-        )
-        st.session_state.sales_table = pd.concat(
-            [st.session_state.sales_table, new_row], ignore_index=True
-        )
+    # event handlers
+    if add_product_btn:
+        add_product_event(selected_product, products[selected_product], quantity)
 
-    # Показать таблицу
+    if clear_table_btn:
+        clear_table_event()
+
+    if apply_btn and len(st.session_state.sales_table) > 0:
+        sale_id = upload_sales(st.session_state.sales_table)
+        st.success(f"Продажа добавлена успешно! ID чека: {sale_id}")
+        clear_table_event()
+
     st.write("Добавленные товары:")
     st.dataframe(st.session_state.sales_table)
-
-    if st.button("Очистить таблицу"):
-        st.session_state.sales_table = pd.DataFrame(
-            columns=["Название продукта", "Barcode", "Количество"]
-        )
-        st.rerun()
-
-    if st.button("Подтвердить продажу") and len(st.session_state.sales_table) > 0:
-        sale_id = SalesService().process_sale(
-            datetime_combined,
-            st.session_state.sales_table,
-        )
-        st.success(f"Продажа добавлена успешно! ID чека: {sale_id}")

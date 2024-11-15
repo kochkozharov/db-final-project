@@ -1,43 +1,38 @@
+from datetime import date
+
+import pandas as pd
+
 import streamlit as st
-from services.analytics import AnalyticsService
-from datetime import datetime, timedelta
+from services.sales import SalesService
+import repositories.products
+from repositories.sales import get_sales_statistics
 
 
-def change_grouping(grouping):
-    if "grouping" not in st.session_state:
-        st.session_state.analysis_data = AnalyticsService().get_sales_statistics(
-            grouping
-        )
-        st.session_state.grouping = grouping
-        st.session_state.grouping_updated_at = datetime.now()
-    elif (
-        st.session_state.grouping != grouping
-        or st.session_state.grouping_updated_at
-        < (datetime.now() - timedelta(minutes=1))
-    ):
-        st.session_state.analysis_data = AnalyticsService().get_sales_statistics(
-            grouping
-        )
-        st.session_state.grouping = grouping
-        st.session_state.grouping_updated_at = datetime.now()
+@st.cache_data
+def get_products() -> dict[str, str]:
+    print("Получение продуктов")
+    products = repositories.products.get_products()
+
+    return {product["name"]: product["barcode"] for product in products}
 
 
-# Page 3: Analyze Sales
+products = get_products()
+
+
 def show_analyze_sales_page():
-    if "analysis_data" not in st.session_state:
-        change_grouping("Day")
-
     st.title("Анализ продаж")
 
-    grouping = st.selectbox(
-        "Group by",
-        ["Day", "Week", "Month", "Year"],
-    )
-    change_grouping(grouping)
+    selected_product = st.selectbox("Выберите продукт", products.keys())
 
     display_option = st.radio("Display as", ["Table", "Chart"])
-    if display_option == "Table":
-        st.dataframe(st.session_state.analysis_data)
-    else:
-        st.line_chart(st.session_state.analysis_data["revenue"])
-        print("1")
+
+    if selected_product:
+        selected_product_barcode = products[selected_product]
+        sales = get_sales_statistics(selected_product_barcode)
+        if len(sales) == 0:
+            st.warning("Нет продаж для выбранного продукта")
+        else:
+            if display_option == "Table":
+                st.dataframe(sales)
+            else:
+                st.line_chart(sales, x="sale_date", y="quantity")
