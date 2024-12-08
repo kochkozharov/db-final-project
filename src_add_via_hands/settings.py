@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv("env.env")
+load_dotenv(".env")
 
 # Чтение и установка env
 DB_CONFIG = {
