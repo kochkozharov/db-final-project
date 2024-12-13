@@ -123,6 +123,41 @@ def add_user_to_chat(employee_id, chat_room_id):
     system_message = f"User {get_user_name_by_id(employee_id)} joined the chat."
     send_message(employee_id, chat_room_id, system_message)
 
+def add_role(role_name):
+    """Adds a new role."""
+    query = "INSERT INTO roles (name) VALUES (%s) RETURNING id"
+    result = execute_query(query, (role_name,))
+    if result:
+        return result[0][0]
+    return None
+
+def delete_role(role_name):
+    """Deletes a role by name."""
+    query = "DELETE FROM roles WHERE name = %s"
+    result = execute_query(query, (role_name,))
+    if result is not None:
+        return True  # Возвращаем True, если запрос выполнен успешно
+    else:
+        return False  # Если запрос не выполнен, возвращаем False
+
+def add_project(project_name):
+    """Adds a new project."""
+    query = "INSERT INTO projects (name) VALUES (%s) RETURNING id"
+    result = execute_query(query, (project_name,))
+    if result:
+        return result[0][0]
+    return None
+
+def delete_project(project_name):
+    """Deletes a project by name."""
+    query = "DELETE FROM projects WHERE name = %s"
+    result = execute_query(query, (project_name,))
+    if result is not None:
+        return True  # Возвращаем True, если запрос выполнен успешно
+    else:
+        return False  # Если запрос не выполнен, возвращаем False
+
+
 def main():
     st.title("Company Chat Application")
 
@@ -220,17 +255,18 @@ def main():
 
         st.subheader("Admin Panel")
 
-        action = st.selectbox("Action", ["Assign Role", "Assign Project"])
+        action = st.selectbox("Action", ["Assign Role", "Assign Project", "Add Role", "Add project", "Delete Role", "Delete project"])
 
         # Capture employee_id after email input, common for both actions
-        email = st.text_input("Email")
-        if email:
-            employee_id = get_user_id_by_email(email)
-            if not employee_id:
-                st.error("No such user.")
-            else:
+
                 # Proceed with actions if user exists
-                if action == "Assign Role":
+        if action == "Assign Role":
+            email = st.text_input("Email")
+            if email:
+                employee_id = get_user_id_by_email(email)
+                if not employee_id:
+                    st.error("No such user.")
+                else:
                     role_name = st.text_input("Role Name")
                     if role_name:
                         role_id = get_id_by_role_name(role_name)
@@ -240,7 +276,13 @@ def main():
                             assign_role_to_employee(employee_id, role_id)
                             st.success("Role assigned successfully.")
 
-                elif action == "Assign Project":
+        elif action == "Assign Project":
+            email = st.text_input("Email")
+            if email:
+                employee_id = get_user_id_by_email(email)
+                if not employee_id:
+                    st.error("No such user.")
+                else:
                     project_name = st.text_input("Project Name")
                     if project_name:
                         project_id = get_id_by_project_name(project_name)
@@ -249,6 +291,41 @@ def main():
                         elif st.button("Assign Project"):
                             assign_project_to_employee(employee_id, project_id)
                             st.success("Project assigned successfully.")
+
+        elif action == "Add Role":
+            new_role_name = st.text_input("New Role Name")
+            if new_role_name:
+                if st.button("Add Role"):
+                    role_id = add_role(new_role_name)
+                    if role_id:
+                        st.success(f"Role '{new_role_name}' added successfully.")
+                    else:
+                        st.error("Failed to add role.")
+
+        elif action == "Delete Role":
+            role_name_to_delete = st.text_input("Role Name to Delete")
+            if role_name_to_delete:
+                if st.button("Delete Role"):
+                    success = delete_role(role_name_to_delete)
+                    if success:
+                        st.success(f"Role '{role_name_to_delete}' deleted successfully.")
+                    else:
+                        st.error(f"Role '{role_name_to_delete}' does not exist.")
+
+        elif action == "Add project":
+            new_project_name = st.text_input("New project Name")
+            if new_project_name:
+                if st.button("Add project"):
+                    project_id = add_project(new_project_name)
+
+        elif action == "Delete project":
+            project_name_to_delete = st.text_input("project Name to Delete")
+            if project_name_to_delete:
+                if st.button("Delete project"):
+                    success = delete_project(project_name_to_delete)
+
+
+
 
 
 if __name__ == "__main__":
