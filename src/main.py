@@ -157,6 +157,39 @@ def delete_project(project_name):
     else:
         return False  # Если запрос не выполнен, возвращаем False
 
+def delete_chat(chat_name):
+    """Deletes a chat by name."""
+    # Check if the chat exists by name
+    query = "SELECT id FROM chat_rooms WHERE name = %s"
+    result = execute_query(query, (chat_name,))
+    
+    if result:
+        chat_id = result[0][0]
+        # Delete the chat
+        query = "DELETE FROM chat_rooms WHERE name = %s"
+        execute_query(query, (chat_name,))
+        st.success(f"Chat with name '{chat_name}' and ID {chat_id} has been deleted.")
+        return True
+    else:
+        st.error(f"Chat with name '{chat_name}' not found.")
+        return False
+
+def delete_user(email):
+    """Deletes a user by email."""
+    # Check if the user exists by email
+    query = "SELECT id FROM employees WHERE email = %s"
+    result = execute_query(query, (email,))
+    
+    if result:
+        user_id = result[0][0]
+        # Delete the user
+        query = "DELETE FROM employees WHERE email = %s"
+        execute_query(query, (email,))
+        st.success(f"User with email '{email}' and ID {user_id} has been deleted.")
+        return True
+    else:
+        st.error(f"User with email '{email}' not found.")
+        return False
 
 def main():
     st.title("Company Chat Application")
@@ -234,10 +267,14 @@ def main():
 
                 # Add a new user to the chat
                 if st.checkbox("Add a new user to this chat"):
-                    new_user_id = st.number_input("Enter User ID", min_value=1, step=1)
-                    if st.button("Add User", key=f"add_user_{chat_room_id}"):
-                        add_user_to_chat(new_user_id, chat_room_id)
-                        st.success("User added to chat.")
+                    new_user_email = st.text_input("Email")
+                    new_user_id = get_user_id_by_email(new_user_email)
+                    if new_user_email:
+                        if st.button("Add User", key=f"add_user_{chat_room_id}"):
+                            add_user_to_chat(new_user_id, chat_room_id)
+                            st.success("User added to chat.")
+                    else:
+                        st.error("No such user.")
 
         # Create a new chat room
         if st.checkbox("Create New Chat Room"):
@@ -255,7 +292,7 @@ def main():
 
         st.subheader("Admin Panel")
 
-        action = st.selectbox("Action", ["Assign Role", "Assign Project", "Add Role", "Add project", "Delete Role", "Delete project"])
+        action = st.selectbox("Action", ["Assign Role", "Assign Project", "Add Role", "Add project", "Delete Role", "Delete project", "Delete Chat", "Delete User"])
 
         # Capture employee_id after email input, common for both actions
 
@@ -296,11 +333,12 @@ def main():
             new_role_name = st.text_input("New Role Name")
             if new_role_name:
                 if st.button("Add Role"):
-                    role_id = add_role(new_role_name)
-                    if role_id:
-                        st.success(f"Role '{new_role_name}' added successfully.")
+                    try:
+                        role_id = add_role(new_role_name)
+                    except:
+                        st.error("Such role already exists.")
                     else:
-                        st.error("Failed to add role.")
+                        st.success(f"Role '{new_role_name}' added successfully.")
 
         elif action == "Delete Role":
             role_name_to_delete = st.text_input("Role Name to Delete")
@@ -316,7 +354,12 @@ def main():
             new_project_name = st.text_input("New project Name")
             if new_project_name:
                 if st.button("Add project"):
-                    project_id = add_project(new_project_name)
+                    try:
+                        project_id = add_project(new_project_name)
+                    except:
+                        st.error("Such project already exists.")
+                    else:
+                        st.success(f"Project '{new_project_name}' added successfully.")
 
         elif action == "Delete project":
             project_name_to_delete = st.text_input("project Name to Delete")
@@ -324,7 +367,17 @@ def main():
                 if st.button("Delete project"):
                     success = delete_project(project_name_to_delete)
 
+        elif action == "Delete Chat":
+            chat_name = st.text_input("chat name to delete")
+            if chat_name:
+                if st.button("Delete Chat"):
+                    delete_chat(chat_name)
 
+        elif action == "Delete User":
+            email = st.text_input("user's email to delete")
+            if email:
+                if st.button("Delete User"):
+                    delete_user(email)
 
 
 
