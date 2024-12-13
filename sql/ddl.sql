@@ -1,4 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- Сотрудники
 CREATE TABLE employees (
     id SERIAL PRIMARY KEY,

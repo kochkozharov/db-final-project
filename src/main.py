@@ -5,16 +5,29 @@ from settings import DB_CONFIG
 
 def execute_query(query: str, params=None):
     """Executes a query on the database."""
-    try:
-        with psycopg2.connect(**DB_CONFIG) as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(query, params)
-                if not query.strip().upper().startswith("SELECT") or query.split()[-2].upper() == "RETURNING":
-                    conn.commit()
+    with psycopg2.connect(**DB_CONFIG) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            if query.strip().upper().startswith("SELECT") or query.split()[-2].upper() == "RETURNING":
                 return cursor.fetchall()
-    except Exception as e:
-        st.error(f"Database error: {e}")
-        return None
+            conn.commit()
+            return
+
+def get_user_name_by_id(user_id):
+    """Fetches the name of the user by their ID."""
+    query = "SELECT name FROM employees WHERE id = %s"
+    result = execute_query(query, (user_id,))
+    if result:
+        return result[0][0]
+    return None
+
+def get_user_id_by_email(email):
+    """Fetches the user ID by their email."""
+    query = "SELECT id FROM employees WHERE email = %s"
+    result = execute_query(query, (email,))
+    if result:
+        return result[0][0]
+    return None
 
 def authenticate_user(email, password):
     """Authenticate user using email and password."""
@@ -51,7 +64,6 @@ def create_chat_room(name, description, created_by):
     """Creates a new chat room and adds the creator as a participant."""
     query = "INSERT INTO chat_rooms (name, description) VALUES (%s, %s) RETURNING id"
     room_id_result = execute_query(query, (name, description))
-    print(room_id_result, flush=True)
     if room_id_result:
         room_id = room_id_result[0][0]
         add_user_to_chat(created_by, room_id)
@@ -64,9 +76,22 @@ def send_message(employee_id, chat_room_id, content):
     execute_query(query, (content, employee_id, chat_room_id))
 
 def get_messages(chat_room_id):
-    """Fetches messages for a chat room."""
+    """Fetches messages for a chat room with additional user info."""
     query = """
-    SELECT messages.content, employees.name, messages.sent_at
+    SELECT 
+        messages.content, 
+        employees.name, 
+        TO_CHAR(messages.sent_at, 'HH24:MI') AS sent_time,
+        COALESCE(array_to_string(array(
+            SELECT r.name FROM roles r
+            JOIN employee_roles er ON r.id = er.role_id
+            WHERE er.employee_id = employees.id
+        ), ', '), 'No Role') AS roles,
+        COALESCE(array_to_string(array(
+            SELECT p.name FROM projects p
+            JOIN employee_projects ep ON p.id = ep.project_id
+            WHERE ep.employee_id = employees.id
+        ), ', '), 'No Project') AS projects
     FROM messages
     JOIN employees ON messages.employee_id = employees.id
     WHERE chat_room_id = %s
@@ -74,25 +99,28 @@ def get_messages(chat_room_id):
     """
     return execute_query(query, (chat_room_id,))
 
-def assign_role_to_employee(employee_id, role_name):
-    """Assigns a role to an employee."""
+def get_id_by_role_name(role_name):
     role_id_query = "SELECT id FROM roles WHERE name = %s"
     role_id = execute_query(role_id_query, (role_name,))
-    if role_id:
-        query = "INSERT INTO employee_roles (employee_id, role_id) VALUES (%s, %s) ON CONFLICT DO NOTHING"
-        execute_query(query, (employee_id, role_id[0][0]))
+    return role_id[0][0] if role_id else None
 
-def assign_project_to_employee(employee_id, project_name):
-    """Assigns a project to an employee."""
+def get_id_by_project_name(project_name):
     project_id_query = "SELECT id FROM projects WHERE name = %s"
     project_id = execute_query(project_id_query, (project_name,))
-    if project_id:
-        query = "INSERT INTO employee_projects (employee_id, project_id) VALUES (%s, %s) ON CONFLICT DO NOTHING"
-        execute_query(query, (employee_id, project_id[0][0]))
+    return project_id[0][0] if project_id else None
+
+def assign_role_to_employee(employee_id, role_id):
+    """Assigns a role to an employee."""
+    query = "INSERT INTO employee_roles (employee_id, role_id) VALUES (%s, %s) ON CONFLICT DO NOTHING"
+    execute_query(query, (employee_id, role_id))
+
+def assign_project_to_employee(employee_id, project_id):
+    query = "INSERT INTO employee_projects (employee_id, project_id) VALUES (%s, %s) ON CONFLICT DO NOTHING"
+    execute_query(query, (employee_id, project_id))
 
 def add_user_to_chat(employee_id, chat_room_id):
     """Adds a user to a chat room and logs a system message."""
-    system_message = f"User {employee_id} joined the chat."
+    system_message = f"User {get_user_name_by_id(employee_id)} joined the chat."
     send_message(employee_id, chat_room_id, system_message)
 
 def main():
@@ -108,8 +136,12 @@ def main():
 
         if st.button("Register"):
             if name and email and password:
-                register_user(name, email, password)
-                st.success("Registration successful. You can now log in.")
+                try:
+                    register_user(name, email, password)
+                except:
+                    st.error("Email already used.")
+                else:
+                    st.success("Registration successful. You can now log in.")
             else:
                 st.error("All fields are required.")
 
@@ -146,7 +178,8 @@ def main():
                 # Display messages
                 messages = get_messages(chat_room_id)
                 for msg in messages:
-                    st.text(f"[{msg[2]}] {msg[1]}: {msg[0]}")
+                    content, sender_name, sent_time, roles, projects = msg
+                    st.text(f"[{sent_time}] {sender_name} ({roles}; {projects}): {content}")
 
                 # Input for new message
                 if f"message_{chat_room_id}" not in st.session_state:
@@ -180,8 +213,6 @@ def main():
                 st.success("Chat room created.")
                 st.rerun()  # Refresh to show the new chat room
 
-
-
     elif menu == "Admin Panel":
         if "user" not in st.session_state or not st.session_state["user"]["is_admin"]:
             st.warning("Admin access required.")
@@ -191,21 +222,34 @@ def main():
 
         action = st.selectbox("Action", ["Assign Role", "Assign Project"])
 
-        if action == "Assign Role":
-            employee_id = st.number_input("Employee ID", min_value=1, step=1)
-            role_name = st.text_input("Role Name")
+        # Capture employee_id after email input, common for both actions
+        email = st.text_input("Email")
+        if email:
+            employee_id = get_user_id_by_email(email)
+            if not employee_id:
+                st.error("No such user.")
+            else:
+                # Proceed with actions if user exists
+                if action == "Assign Role":
+                    role_name = st.text_input("Role Name")
+                    if role_name:
+                        role_id = get_id_by_role_name(role_name)
+                        if not role_id:
+                            st.error("No such role.")
+                        elif st.button("Assign Role"):
+                            assign_role_to_employee(employee_id, role_id)
+                            st.success("Role assigned successfully.")
 
-            if st.button("Assign Role"):
-                assign_role_to_employee(employee_id, role_name)
-                st.success("Role assigned successfully.")
+                elif action == "Assign Project":
+                    project_name = st.text_input("Project Name")
+                    if project_name:
+                        project_id = get_id_by_project_name(project_name)
+                        if not project_id:
+                            st.error("No such project.")
+                        elif st.button("Assign Project"):
+                            assign_project_to_employee(employee_id, project_id)
+                            st.success("Project assigned successfully.")
 
-        elif action == "Assign Project":
-            employee_id = st.number_input("Employee ID", min_value=1, step=1)
-            project_name = st.text_input("Project Name")
-
-            if st.button("Assign Project"):
-                assign_project_to_employee(employee_id, project_name)
-                st.success("Project assigned successfully.")
 
 if __name__ == "__main__":
     main()
