@@ -1,7 +1,8 @@
 from services.db import execute_query
 from services.mappers import get_user_name_by_id
 from repositories.user_repo import send_message
-
+from settings import redis_client
+import json
 
 def create_chat_room(name, description, created_by):
     """Creates a new chat room and adds the creator as a participant."""
@@ -13,10 +14,14 @@ def create_chat_room(name, description, created_by):
         return room_id
     return None
 
-
-
 def get_messages(chat_room_id):
     """Fetches messages for a chat room with additional user info."""
+    cache_key = f"chat_messages:{chat_room_id}"
+    
+    # 1. Попробовать получить из Redis
+    cached_data = redis_client.get(cache_key)
+    if cached_data:
+        return json.loads(cached_data)
     query = """
     SELECT 
         messages.content, 
@@ -37,7 +42,9 @@ def get_messages(chat_room_id):
     WHERE chat_room_id = %s
     ORDER BY messages.sent_at ASC
     """
-    return execute_query(query, (chat_room_id,))
+    rows = execute_query(query, (chat_room_id,))
+    redis_client.setex(cache_key, 60, json.dumps(rows))
+    return rows
 
 def delete_chat(chat_name):
     """Deletes a chat by name."""
@@ -58,3 +65,5 @@ def add_user_to_chat(employee_id, chat_room_id):
     """Adds a user to a chat room and logs a system message."""
     system_message = f"User {get_user_name_by_id(employee_id)} joined the chat."
     send_message(employee_id, chat_room_id, system_message)
+    cache_key = f"user:{employee_id}:chat_rooms"
+    redis_client.delete(cache_key)

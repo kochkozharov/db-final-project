@@ -1,4 +1,5 @@
 from services.db import execute_query
+from settings import redis_client
 
 def get_user_name_by_id(user_id):
     """Fetches the name of the user by their ID."""
@@ -10,6 +11,8 @@ def get_user_name_by_id(user_id):
 
 def get_user_id_by_email(email):
     """Fetches the user ID by their email."""
+    cache_key = f"user:id_by_email:{email}"
+    cached = redis_client.get(cache_key)
     query = "SELECT id FROM employees WHERE email = %s"
     result = execute_query(query, (email,))
     if result:

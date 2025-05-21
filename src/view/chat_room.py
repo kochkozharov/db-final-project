@@ -2,13 +2,20 @@ import streamlit as st
 from repositories.chat_repo import get_messages, add_user_to_chat, create_chat_room
 from repositories.user_repo import list_user_chat_rooms, send_message
 from services.mappers import get_user_id_by_email
+from settings import redis_client
+import json 
 
 def chat_rooms():
-    if "user" not in st.session_state:
+    if "auth_token" not in st.session_state:
         st.warning("Please log in first.")
         return
-
-    user = st.session_state["user"]
+    
+    token = st.session_state.get("auth_token")
+    raw = redis_client.get(f"auth:token:{token}")
+    if not raw:
+        st.warning("Token is expired")
+        return
+    user = json.loads(raw)
 
     st.subheader("Chat Rooms")
 

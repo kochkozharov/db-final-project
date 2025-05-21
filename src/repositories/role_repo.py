@@ -1,8 +1,11 @@
 from services.db import execute_query
+from settings import redis_client
 
 
 def assign_role_to_employee(employee_id, role_id):
     """Assigns a role to an employee."""
+    cache_key = f"user:auth:{employee_id}"
+    redis_client.delete(cache_key)
     query = "INSERT INTO employee_roles (employee_id, role_id) VALUES (%s, %s) ON CONFLICT DO NOTHING"
     execute_query(query, (employee_id, role_id))
 

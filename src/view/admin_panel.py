@@ -5,10 +5,23 @@ from repositories.project_repo import assign_project_to_employee, add_project, d
 from repositories.role_repo import assign_role_to_employee, add_role, delete_role
 from repositories.chat_repo import delete_chat
 from repositories.user_repo import delete_user
+from settings import redis_client
+import json
 
 
-def admin_panel():       
-    if "user" not in st.session_state or not st.session_state["user"]["is_admin"]:
+def admin_panel():
+    if "auth_token" not in st.session_state:
+        st.warning("Please log in first.")
+        return
+
+    token = st.session_state.get("auth_token")
+    raw = redis_client.get(f"auth:token:{token}")
+    if not raw:
+        st.warning("Token is expired")
+        return
+    user = json.loads(raw)
+
+    if not user["is_admin"]:
             st.warning("Admin access required.")
             return
 
