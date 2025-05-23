@@ -1,9 +1,33 @@
+import threading
 import streamlit as st
 from repositories.chat_repo import get_messages, add_user_to_chat, create_chat_room
 from repositories.user_repo import list_user_chat_rooms, send_message
 from services.mappers import get_user_id_by_email
 from settings import redis_client
 import json 
+import time
+import os
+from streamlit.runtime.scriptrunner import get_script_run_ctx
+from streamlit.runtime import get_instance
+from streamlit.runtime.scriptrunner import add_script_run_ctx
+from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
+
+def start_background_worker() -> None:
+    def start_work() -> None:
+        ctx = get_script_run_ctx()
+
+        runtime = get_instance()
+
+        pubsub = redis_client.pubsub(ignore_subscribe_messages=True)
+        pubsub.subscribe(f"critical_events")
+        for msg in pubsub.listen():
+            print("Rerun !")
+            session_info = runtime._session_mgr.get_active_session_info(ctx.session_id)
+            session_info.session.request_rerun(None)
+
+    thread = threading.Thread(target=start_work, daemon=True)
+    add_script_run_ctx(thread)
+    return thread
 
 def chat_rooms():
     if "auth_token" not in st.session_state:
@@ -25,6 +49,14 @@ def chat_rooms():
         chat_room = st.selectbox("Select Chat Room", chat_rooms, format_func=lambda x: x[1])
         if chat_room:
             chat_room_id = chat_room[0]
+
+
+            # Запускем поток один раз
+            if "chat_listener_thread" not in st.session_state:
+                t = start_background_worker()
+                t.start()
+                st.session_state.chat_listener_thread = t
+            
             st.subheader(f"Chat Room: {chat_room[1]}")
 
             # Display messages
@@ -68,3 +100,6 @@ def chat_rooms():
             create_chat_room(new_chat_name, new_chat_description, user['id'])
             st.success("Chat room created.")
             st.rerun()  # Refresh to show the new chat room
+
+    # time.sleep(1)
+    # st.rerun()

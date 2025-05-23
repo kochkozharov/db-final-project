@@ -17,7 +17,7 @@ def login():
             # 2. Подготовим данные для хранения
             data = json.dumps(user)
             # 3. Пишем в Redis с TTL
-            redis_client.setex(f"auth:token:{token}", 60, data)
+            redis_client.setex(f"auth:token:{token}", 600, data)
             # 4. Сохраняем токен в session_state
             st.session_state["auth_token"] = token
 
