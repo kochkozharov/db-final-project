@@ -57,14 +57,7 @@ def send_message(employee_id, chat_room_id, content):
     redis_client.delete(cache_key)
     query = "INSERT INTO messages (content, employee_id, chat_room_id) VALUES (%s, %s, %s)"
     execute_query(query, (content, employee_id, chat_room_id))
-    payload = {
-        "type": "new_chat_message",
-        "chat_room_id": chat_room_id,
-        "sender_id": employee_id,
-        "content": content,
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    }
-    redis_client.publish(f"critical_events", json.dumps(payload))
+    redis_client.publish(f"critical_events", "yes")
 
 def delete_user(email):
     """Deletes a user by email."""

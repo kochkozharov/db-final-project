@@ -12,7 +12,7 @@ from streamlit.runtime import get_instance
 from streamlit.runtime.scriptrunner import add_script_run_ctx
 from streamlit.runtime.scriptrunner_utils.script_run_context import get_script_run_ctx
 
-def start_background_worker() -> None:
+def chat_background_worker() -> None:
     def start_work() -> None:
         ctx = get_script_run_ctx()
 
@@ -27,7 +27,7 @@ def start_background_worker() -> None:
 
     thread = threading.Thread(target=start_work, daemon=True)
     add_script_run_ctx(thread)
-    return thread
+    thread.start()
 
 def chat_rooms():
     if "auth_token" not in st.session_state:
@@ -43,6 +43,9 @@ def chat_rooms():
 
     st.subheader("Chat Rooms")
 
+    if "chat_listener_thread" not in st.session_state:
+        t = chat_background_worker()
+        st.session_state.chat_listener_thread = True
     # Fetch chat rooms
     chat_rooms = list_user_chat_rooms(user["id"])
     if chat_rooms:
@@ -52,10 +55,6 @@ def chat_rooms():
 
 
             # Запускем поток один раз
-            if "chat_listener_thread" not in st.session_state:
-                t = start_background_worker()
-                t.start()
-                st.session_state.chat_listener_thread = t
             
             st.subheader(f"Chat Room: {chat_room[1]}")
 
